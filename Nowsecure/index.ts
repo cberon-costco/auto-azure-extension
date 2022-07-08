@@ -43,6 +43,35 @@ let showStatusMessages = tl.getInput("showStatusMessages", false);
 tl.debug("showStatusMessages: " + showStatusMessages);
 
 //////////////////////////////////////////////////////////////////////////
+// Resolve Filepath if user gave us **/*.ipa syntax
+//////////////////////////////////////////////////////////////////////////
+// we allow broken symlinks - since there could be broken symlinks found in source folder, but filtered by contents pattern
+const findOptions: tl.FindOptions = {
+    allowBrokenSymbolicLinks: true,
+    followSpecifiedSymbolicLink: true,
+    followSymbolicLinks: true
+};
+
+// clean up user supplied folder path
+let sourceFolder: string = path.dirname(filepath);
+sourceFolder: string = path.normalize(sourceFolder);
+
+let allPaths: string[] = tl.find(sourceFolder, findOptions);
+let sourceFolderPattern = sourceFolder.replace('[', '[[]'); // directories can have [] in them, and they have special meanings as a pattern, so escape them
+
+// resolve * or ** syntax
+let content: string = path.basename(filepath);
+
+let matchedPaths: string[] = tl.match(allPaths, content, sourceFolderPattern); // default match options
+let matchedFiles: string[] = matchedPaths.filter((itemPath: string) => !stats(itemPath, false).isDirectory()); // filter-out directories
+
+console.log(tl.loc('FoundNFiles', matchedFiles.length));
+
+if (matchedFiles.length > 0) {
+  // just take the first match
+  console.log(tl.loc('Processing', matchedFiles[0]));
+
+//////////////////////////////////////////////////////////////////////////
 // Find Java executable and set parameters
 //////////////////////////////////////////////////////////////////////////
 let task = JSON.parse(fs.readFileSync(path.join(__dirname, "task.json")).toString());
@@ -64,7 +93,7 @@ java.arg("azure-nowsecure-auto-security-test");
 java.arg("--plugin-version");
 java.arg(version);
 java.arg("--file");
-java.arg(filepath);
+java.arg(matchedFiles[0]);
 java.arg("--group-id");
 java.arg(group);
 java.arg("--token");
@@ -133,3 +162,4 @@ java.exec()
   .fail(function (err: Error) {
     onError("azure-nowsecure-auto-security-test upload and security test failed [" + err.toString() + "]", 1);
   });
+}
